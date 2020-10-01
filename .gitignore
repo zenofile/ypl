@@ -1,0 +1,7 @@
+.venv
+.vscode
+examples.py
+*.pickle
+.token
+*.json
+*.code-workspace
