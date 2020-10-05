@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +35,7 @@ def authenticate(headless: bool = True) -> GApiResource:
     if os.path.exists(".token"):
         with open(".token", "rb") as token:
             creds = pickle.load(token)
+
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(ApiRequest())
@@ -54,51 +57,73 @@ def enum_vids(
     id: str,
     page_size: int = 50,
     verbose: bool = False,
-    printer: Callable[..., None] = pprint.PrettyPrinter(indent=4).pprint,
+    printer: Callable[..., None] = pprint.PrettyPrinter(
+        indent=4, stream=sys.stderr
+    ).pprint,
 ) -> Generator[str, None, None]:
     api = authenticate(headless=False)
-    if api:
-        request = api.playlistItems().list(
-            part="snippet", playlistId=id, maxResults=page_size
-        )
+    if not api:
+        # raise StopIteration
+        return
 
-        while request:
-            tries = 1
-            try:
-                response = request.execute()
-                if verbose:
-                    printer(response)
-                for item in response["items"]:
-                    yield item["snippet"]["resourceId"]["videoId"]
-                request = api.playlistItems().list_next(request, response)
+    req = api.playlistItems().list(
+        part="snippet",
+        playlistId=id,
+        maxResults=page_size,
+        fields="items(id,snippet(title,resourceId/videoId)),nextPageToken",
+    )
 
-            except HttpError as err:
-                # probably rate limiting, try one more time
-                if err.resp.status in (403, 500, 503) and tries > 0:
-                    import time
+    obs = set()
+    while req:
+        tries = 2
 
-                    time.sleep(5)
-                    tries -= 1
-                else:
-                    print(
-                        "There was an error creating the model. Check the details:\n{}".format(
-                            err._get_reason()
-                        ),
-                        file=sys.stderr,
-                    )
-                    raise
+        try:
+            res = req.execute()
+            if verbose:
+                printer(res)
+
+            for item in res["items"]:
+                id = item["snippet"]["resourceId"]["videoId"]
+                # avoid duplicates, just in case
+                if id not in obs:
+                    yield id
+                    obs.add(id)
+                elif verbose:
+                    print("Duplicate filtered: {}".format(id), file=sys.stderr)
+
+            req = api.playlistItems().list_next(req, res)
+
+        except HttpError as err:
+            # probably rate limiting, try again
+            if err.resp.status in (403, 500, 503) and tries > 0:
+                import time
+
+                time.sleep(5)
+                tries -= 1
+            else:
+                print(
+                    "There was an error retrieving the playlist. Check the details:\n{}".format(
+                        err._get_reason()
+                    ),
+                    file=sys.stderr,
+                )
+                raise
 
 
 def print_iter(
     it: Iterator,
     fmt: str,
-    surround: Tuple[str, str] = ("\n", "\n"),
+    sur: Tuple[str, str] = ("\n", "\n"),
     out: TextIO = sys.stderr,
 ):
-    print(surround[0], file=sys.stderr)
-    for v in it:
+    print(sur[0], file=out, end="")
+    num = 0
+    for n, v in enumerate(it):
         print(fmt.format(v))
-    print(surround[1], file=sys.stderr)
+        num = n + 1
+    print(sur[1], file=out, end="")
+
+    return num
 
 
 def main():
@@ -114,13 +139,13 @@ def main():
         action="store_true",
     )
     args = parser.parse_args()
-    vids = {vid for vid in enum_vids(args.id, verbose=args.verbose)}
-    print_iter(
-        iter(vids),
+
+    num = print_iter(
+        enum_vids(args.id, verbose=args.verbose),
         "https://www.youtube.com/watch?v={}",
         ("\n", "\n") if args.verbose else (str(), str()),
     )
-    print("Extracted {} elements.".format(len(vids)), file=sys.stderr)
+    print("\nRetrieved {} elements.".format(num), file=sys.stderr)
 
 
 if __name__ == "__main__":
