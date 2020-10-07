@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import os
 import pickle
 import pprint
-import stat
 import sys
 import typing
-from contextlib import suppress
+from pathlib import Path
 
-from google.auth.transport.requests import Request as ApiRequest
+from google.auth.transport.requests import Request as APIRequest
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import Resource as GApiResource
+from googleapiclient.discovery import Resource as GAPIResource
 from googleapiclient.discovery import build as BuildResource
 from googleapiclient.errors import HttpError
 
@@ -29,28 +27,42 @@ API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
 
 
-def authenticate(headless: bool = True) -> GApiResource:
-    creds = None
+def config_path():
+    # ignore XDG spec for now
+    base = home = Path.home()
+    # if os.name == "posix":
+    if (home / ".config").exists():
+        try:
+            base = base / ".config/ydlp"
+            base.mkdir(parents=False, exist_ok=True)
+        except FileNotFoundError:
+            base = home
+    return base
 
-    if os.path.exists(".token"):
-        with open(".token", "rb") as token:
-            creds = pickle.load(token)
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(ApiRequest())
+def authenticate(headless: bool = True) -> GAPIResource:
+    conf = config_path()
+    cred = None
+    stok = conf / ".ydlp.token"
+
+    if stok.exists():
+        with open(stok, "rb") as tok:
+            cred = pickle.load(tok)
+
+    if not cred or not cred.valid:
+        if cred and cred.expired and cred.refresh_token:
+            cred.refresh(APIRequest())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                CLIENT_SECRETS_FILE, SCOPES
+                conf / CLIENT_SECRETS_FILE, SCOPES
             )
-            creds = flow.run_console() if headless else flow.run_local_server(port=0)
+            cred = flow.run_console() if headless else flow.run_local_server(port=0)
 
-        with open(".token", "wb") as token:
-            with suppress(OSError):
-                os.fchmod(token.fileno(), stat.S_IRUSR | stat.S_IWUSR)
-            pickle.dump(creds, token)
+        with open(stok, "wb") as tok:
+            stok.chmod(0o600)
+            pickle.dump(cred, tok)
 
-    return BuildResource(API_SERVICE_NAME, API_VERSION, credentials=creds)
+    return BuildResource(API_SERVICE_NAME, API_VERSION, credentials=cred)
 
 
 def enum_vids(
