@@ -9,7 +9,7 @@ with open("requirements.txt", "rt") as f:
   requirements = f.read().splitlines()
   
 setuptools.setup(
-    name="ydlp", # Replace with your own username
+    name="ypl", # Replace with your own username
     version="0.0.1",
     author="Thorsten Schubert",
     author_email="tschubert@bafh.org",
@@ -18,7 +18,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     packages=setuptools.find_packages(),
     install_requires=requirements,
-    entry_points={"console_scripts": ["ydlp = ydlp:main"]},
+    entry_points={"console_scripts": ["ypl = ypl:main"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

@@ -33,7 +33,7 @@ def config_path():
     # if os.name == "posix":
     if (home / ".config").exists():
         try:
-            base = base / ".config/ydlp"
+            base = base / ".config/ypl"
             base.mkdir(parents=False, exist_ok=True)
         except FileNotFoundError:
             base = home
@@ -43,7 +43,7 @@ def config_path():
 def authenticate(headless: bool = True) -> GAPIResource:
     conf = config_path()
     cred = None
-    stok = conf / ".ydlp.token"
+    stok = conf / ".ypl.token"
 
     if stok.exists():
         with open(stok, "rb") as tok:
@@ -140,7 +140,7 @@ def print_iter(
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="ydlp", description="Lists all videos inside a playlist."
+        prog="ypl", description="Lists all videos inside a playlist."
     )
     parser.add_argument("id", type=str, help="The playlist id.")
     parser.add_argument(
